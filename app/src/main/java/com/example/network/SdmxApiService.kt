@@ -67,7 +67,7 @@ class SdmxApiService {
         }
     }
     
-    suspend fun createLine(username: String, pass: String, expDate: String, adultos: Boolean): Boolean = withContext(Dispatchers.IO) {
+    suspend fun createLine(username: String, pass: String, expDate: String, adultos: Boolean): Result<String> = withContext(Dispatchers.IO) {
         val formBuilder = FormBody.Builder()
             .add("action", "line")
             .add("trial", "1")
@@ -101,16 +101,34 @@ class SdmxApiService {
             .addHeader("Referer", "https://sdmx.vip/resellers/line?trial=1")
             .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/146.0.0.0 Safari/537.36")
             .addHeader("X-Requested-With", "XMLHttpRequest")
+            // No need to manually add Cookie, the client handles it, but let's keep it safe
             .addHeader("Cookie", cookieJar.getCookieString())
             .build()
             
         try {
             client.newCall(request).execute().use { response ->
-                return@withContext response.isSuccessful
+                val bodyStr = response.body?.string() ?: ""
+                Log.d("SdmxApi", "Create response: $bodyStr")
+                // Sometimes the server returns 200 OK but with an error message like {"result":false,"message":"Username already exists"}
+                if (bodyStr.contains("\"result\":false") || (bodyStr.contains("error", ignoreCase = true) && !bodyStr.contains("success"))) {
+                    Log.e("SdmxApi", "Error from server: $bodyStr")
+                    // Try to parse error message if it's json
+                    try {
+                        val obj = JSONObject(bodyStr)
+                        val msg = obj.optString("message", "")
+                        if (msg.isNotEmpty()) return@withContext Result.failure(Exception(msg))
+                    } catch (e: Exception) {}
+                    return@withContext Result.failure(Exception("Error de servidor. Revisa el log."))
+                }
+                
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(Exception("Error HTTP ${response.code}"))
+                }
+                return@withContext Result.success("OK")
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext false
+            return@withContext Result.failure(Exception(e.message ?: "Error de red"))
         }
     }
     
@@ -128,6 +146,8 @@ class SdmxApiService {
             
         try {
             client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                Log.d("SdmxApi", "Delete response: $bodyStr")
                 return@withContext response.isSuccessful
             }
         } catch (e: Exception) {
@@ -137,9 +157,24 @@ class SdmxApiService {
     }
     
     suspend fun getTableIds(): Map<String, String> = withContext(Dispatchers.IO) {
-        val url = "https://sdmx.vip/resellers/table?draw=1&id=lines&filter=&reseller=&start=0&length=-1&order[0][column]=0&order[0][dir]=desc&search[value]=&search[regex]=false&_=${System.currentTimeMillis()}"
+        val urlBuilder = HttpUrl.Builder()
+            .scheme("https")
+            .host("sdmx.vip")
+            .addPathSegments("resellers/table")
+            .addQueryParameter("draw", "1")
+            .addQueryParameter("id", "lines")
+            .addQueryParameter("filter", "")
+            .addQueryParameter("reseller", "")
+            .addQueryParameter("start", "0")
+            .addQueryParameter("length", "-1")
+            .addQueryParameter("order[0][column]", "0")
+            .addQueryParameter("order[0][dir]", "desc")
+            .addQueryParameter("search[value]", "")
+            .addQueryParameter("search[regex]", "false")
+            .addQueryParameter("_", System.currentTimeMillis().toString())
+
         val request = Request.Builder()
-            .url(url)
+            .url(urlBuilder.build())
             .get()
             .addHeader("Accept", "application/json, text/javascript, */*; q=0.01")
             .addHeader("Host", "sdmx.vip")

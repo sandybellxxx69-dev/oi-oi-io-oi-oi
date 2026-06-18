@@ -10,6 +10,7 @@ import com.example.data.UserModel
 import com.example.network.SdmxApiService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -96,9 +97,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("🗑️ Eliminado: ${u.usuario} (id: ${u.id}) - Result: $delOk")
             }
             val createOk = api.createLine(u.usuario, u.password, u.vencimiento, u.adultos)
-            addLog("✅ Creado: ${u.usuario} - Result: $createOk")
-            if (createOk) procesados++
+            if (createOk.isSuccess) {
+                addLog("✅ Creado: ${u.usuario}")
+                procesados++
+            } else {
+                addLog("❌ Error en ${u.usuario}: ${createOk.exceptionOrNull()?.message}")
+            }
         }
+        
+        delay(1500)
 
         val newIds = api.getTableIds()
         val updatedUsers = allUsers.map { u ->
@@ -133,11 +140,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val expDateStr = sdf.format(targetDate)
 
         val createOk = api.createLine(username, pass, expDateStr, adultos)
-        if (!createOk) {
-            addLog("Error: No se pudo crear la línea.")
+        if (createOk.isFailure) {
+            val err = createOk.exceptionOrNull()?.message ?: "Desconocido"
+            addLog("❌ Error al crear: $err")
             _isLoading.value = false
             return@launch
         }
+        
+        delay(1500) // The server might take a moment to reflect the new user in the table
 
         val ids = api.getTableIds()
         val newId = ids[username] ?: ""

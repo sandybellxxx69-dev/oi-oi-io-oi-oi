@@ -88,9 +88,15 @@ class SdmxWorker(
                 expDate = userToRenew.vencimiento,
                 adultos = userToRenew.adultos
             )
-            Log.d("SdmxWorker", "✅ Creado: ${userToRenew.usuario} - Result: $createOk")
-            if (createOk) procesados++
+            if (createOk.isSuccess) {
+                Log.d("SdmxWorker", "✅ Creado: ${userToRenew.usuario}")
+                procesados++
+            } else {
+                Log.d("SdmxWorker", "❌ Error en ${userToRenew.usuario}: ${createOk.exceptionOrNull()?.message}")
+            }
         }
+        
+        kotlinx.coroutines.delay(1500)
 
         // Get new IDs
         val newTableIds = api.getTableIds()
