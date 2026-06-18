@@ -16,8 +16,8 @@ class PreferencesManager(private val context: Context) {
         val KEY_INTERVAL = stringPreferencesKey("interval_hours")
     }
 
-    val userSdmx: Flow<String?> = context.dataStore.data.map { it[KEY_USER] }
-    val passSdmx: Flow<String?> = context.dataStore.data.map { it[KEY_PASS] }
+    val userSdmx: Flow<String> = context.dataStore.data.map { it[KEY_USER] ?: "" }
+    val passSdmx: Flow<String> = context.dataStore.data.map { it[KEY_PASS] ?: "" }
     val intervalHours: Flow<String> = context.dataStore.data.map { it[KEY_INTERVAL] ?: "24" }
 
     suspend fun saveCredentials(user: String, pass: String) {
